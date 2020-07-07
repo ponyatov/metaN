@@ -1,4 +1,7 @@
 
+
+import os, sys
+
 ## graph
 
 class Object:
@@ -50,28 +53,114 @@ class Object:
         self.slot[key] = that
         return self
 
+    def __lshift__(self, that):
+        return self.__setitem__(that._type(), that)
+
+    def __rshift__(self, that):
+        return self.__setitem__(that.val, that)
+
     def __floordiv__(self, that):
+        if isinstance(that, str):
+            return self // String(that)
+        if isinstance(that, list):
+            for i in that:
+                self // i
+            return self
         self.nest.append(that)
         return self
 
-class Class(Object):
-    def __init__(self, C):
-        Object.__init__(self, C.__name__)
+    ## eval
+
+    def eval(self, ctx): raise Error((self))
+
+## error
+
+class Error(Object, BaseException):
+    pass
+
+## primitive
 
 class Primitive(Object):
+    def eval(self, ctx): return self
+
+class Symbol(Primitive):
     pass
 
 class String(Primitive):
     pass
 
-class File(Object):
-    def __floordiv__(self, that):
-        if isinstance(that, str):
-            return super().__floordiv__(String(that))
-        else:
-            return super().__floordiv__(that)
+class Number(Primitive):
+    def __init__(self, V):
+        Primitive.__init__(self, float(V))
 
-class Module(Object):
+class Integer(Primitive):
+    def __init__(self, V):
+        Primitive.__init__(self, int(V))
+
+    def add(self, that, ctx):
+        return Integer(self.val + that.val)
+
+## active
+
+class Active(Object):
+    pass
+
+class Op(Active):
+    def eval(self, ctx):
+        if len(self.nest) == 2:
+            lval = self.nest[0].eval(ctx)
+            rval = self.nest[1].eval(ctx)
+        if self.val == '+':
+            return lval.add(rval, ctx)
+        raise Error((self))
+
+## I/O
+
+class IO(Object):
+    pass
+
+class Dir(IO):
+    def __init__(self, V):
+        IO.__init__(self, V)
+        try:
+            os.mkdir(self.val)
+        except FileExistsError:
+            pass
+
+    def __floordiv__(self, that):
+        if issubclass(that.__class__, File):
+            filename = '%s/%s' % (self.val, that.val)
+            print('filename', filename)
+            that.fh = open(filename, 'w')
+        return IO.__floordiv__(self, that)
+
+class File(IO):
+    def __init__(self, V):
+        IO.__init__(self, V)
+        self.fh = None
+
+    def __floordiv__(self, that):
+        # raise Error((self))
+        if self.fh != None:
+            raise Error((self))
+            self.fh.write("'%s' % that.val")
+            self.fh.flush()
+        return IO.__floordiv__(self, that)
+
+class Makefile(File):
+    def __init__(self, V='Makefile'):
+        File.__init__(self, V)
+
+## meta
+
+class Meta(Object):
+    pass
+
+class Class(Meta):
+    def __init__(self, C):
+        Object.__init__(self, C.__name__)
+
+class Module(Meta):
     pass
 
 class Section(Object):
@@ -128,4 +217,38 @@ string = Class(String)
 # string['super'] = primitive
 primitive // string
 
-print(metaL)
+# print(metaL)
+
+hello = Object('Hello')
+world = Symbol('World')
+left = Object('left')
+right = Object('right')
+# print(hello // world << left >> right)
+
+dj = Module('django')
+djdir = dj['dir'] = Dir(dj.val)
+djmk = dj['mk'] = (djdir // Makefile())
+djmk // ('''
+
+CWD     = $(CURDIR)
+MODULE  = $(notdir $(CWD))
+OS     ?= $(shell uname -s)
+
+NOW = $(shell date +%%d%%m%%y)
+REL = $(shell git rev-parse --short=4 HEAD)
+
+PIP = $(CWD)/bin/pip3
+PY  = $(CWD)/bin/python3
+
+''' % ()).split('\n')
+print(djmk)
+
+# https://github.com/ponyatov/SICPy/wiki/1.1.1--Expressions/_edit
+
+Number(486)
+
+ctx = Object('context')
+
+add = Op('+') // Integer(137) // Integer(349)
+print(add)
+print(add.eval(ctx))

@@ -8,11 +8,23 @@ REL = $(shell git rev-parse --short=4 HEAD)
 PIP = $(CWD)/bin/pip3
 PY  = $(CWD)/bin/python3
 
-all: $(MODULE).log
-$(MODULE).log: $(PY) $(MODULE).py $(MODULE).ini
-	$^ > $@
 
 
+all: $(PY) $(MODULE).py $(MODULE).ini
+	$(PY) -i $(MODULE).py
+
+
+
+.PHONY: install update
+
+install: $(OS)_install $(PIP)
+	$(PIP) install    -r requirements.txt
+	$(MAKE) requirements.txt
+
+update: $(OS)_update $(PIP)
+	$(PIP) install -U    pip
+	$(PIP) install -U -r requirements.txt
+	$(MAKE) requirements.txt
 
 $(PIP) $(PY):
 	python3 -m venv .
@@ -22,6 +34,12 @@ $(PIP) $(PY):
 .PHONY: requirements.txt
 requirements.txt: $(PIP)
 	$< freeze | grep -v 0.0.0 > $@
+
+.PHONY: Linux_install Linux_update
+
+Linux_install Linux_update:
+	sudo apt update
+	sudo apt install -u `cat apt.txt`
 
 
 
